@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#070c18"/>
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#070c18" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="brainGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#glow)"/>
+  <text x="256" y="330" font-size="240" text-anchor="middle" font-family="Apple Color Emoji, Segoe UI Emoji, sans-serif">🧠</text>
+  <rect x="160" y="400" width="192" height="6" rx="3" fill="url(#brainGrad)" opacity="0.6"/>
+</svg>
