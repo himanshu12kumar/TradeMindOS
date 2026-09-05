@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Dashboard from './components/Dashboard';
@@ -11,6 +11,7 @@ import HistoryPage from './pages/HistoryPage';
 import BehaviourPage from './pages/BehaviourPage';
 import InsightsPage from './pages/InsightsPage';
 import SettingsPage from './pages/SettingsPage';
+import LiveTerminalPage from './pages/LiveTerminalPage';
 import AIBot from './components/AIBot';
 import useBotMonitor from './hooks/useBotMonitor';
 
@@ -28,10 +29,13 @@ function AuthRoute({ children }) {
 
 function AppLayout() {
   const { user } = useAuth();
+  const location = useLocation();
+  const isTerminal = location.pathname === '/terminal';
   const monitorStats = useBotMonitor(user ? 25000 : null);
+
   return (
     <>
-      {user && <Navbar />}
+      {user && !isTerminal && <Navbar />}
       <Routes>
         {/* Auth pages */}
         <Route path="/login"    element={<AuthRoute><LoginPage /></AuthRoute>} />
@@ -43,6 +47,9 @@ function AppLayout() {
         <Route path="/trade"  element={<ProtectedRoute><TradeForm /></ProtectedRoute>} />
         <Route path="/review" element={<ProtectedRoute><WeeklyReview /></ProtectedRoute>} />
 
+        {/* Live Trading Terminal (Paper & Zerodha) */}
+        <Route path="/terminal" element={<ProtectedRoute><LiveTerminalPage /></ProtectedRoute>} />
+
         {/* V2 pages */}
         <Route path="/history"   element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
         <Route path="/behaviour" element={<ProtectedRoute><BehaviourPage /></ProtectedRoute>} />
@@ -51,7 +58,7 @@ function AppLayout() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      {user && <AIBot monitorStats={monitorStats} />}
+      {user && !isTerminal && <AIBot monitorStats={monitorStats} />}
     </>
   );
 }

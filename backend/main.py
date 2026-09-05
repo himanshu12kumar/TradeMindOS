@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import Base, engine
 from routers import auth, plans, trades, behaviour, scores
-from routers import history, insights, email_settings, ai
+from routers import history, insights, email_settings, ai, terminal
 from scheduler import start_scheduler, stop_scheduler
 
 # ─── Create / migrate tables ──────────────────────────────────────────────────
@@ -14,9 +14,10 @@ app = FastAPI(
     title="TradeMind OS API",
     description=(
         "Behavioral Operating System for Traders. "
-        "V2: Trade History, Insights, Email Digest, Behaviour Analytics."
+        "V2: Trade History, Insights, Email Digest, Behaviour Analytics. "
+        "V2+: Live Trading Terminal (Paper & Zerodha Kite)."
     ),
-    version="2.0.0",
+    version="2.1.0",
 )
 
 # ─── CORS ─────────────────────────────────────────────────────────────────────
@@ -57,6 +58,8 @@ app.include_router(history.router)
 app.include_router(insights.router)
 app.include_router(email_settings.router)
 app.include_router(ai.router)
+app.include_router(terminal.router)
+
 
 
 @app.get("/", tags=["health"])

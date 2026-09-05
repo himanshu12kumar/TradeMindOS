@@ -58,6 +58,10 @@ class User(Base):
     plans = relationship("TradingPlan", back_populates="user")
     trades = relationship("Trade", back_populates="user")
     behaviour_logs = relationship("BehaviourLog", back_populates="user")
+    broker_credentials = relationship("BrokerCredential", back_populates="user", cascade="all, delete-orphan")
+    live_orders = relationship("LiveOrder", back_populates="user", cascade="all, delete-orphan")
+    live_positions = relationship("LivePosition", back_populates="user", cascade="all, delete-orphan")
+
 
 
 class TradingPlan(Base):
@@ -154,3 +158,65 @@ class BehaviourLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="behaviour_logs")
+
+
+class BrokerCredential(Base):
+    __tablename__ = "broker_credentials"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    broker_name = Column(String(50), default="ZERODHA", nullable=False)
+    api_key = Column(String(100), nullable=True)
+    api_secret = Column(String(255), nullable=True)  # stored securely, masked in UI
+    access_token = Column(String(255), nullable=True)
+    trading_mode = Column(String(20), default="PAPER", nullable=False)  # "PAPER" or "REAL"
+    paper_balance = Column(Float, default=100000.0, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="broker_credentials")
+
+
+class LiveOrder(Base):
+    __tablename__ = "live_orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    broker_order_id = Column(String(100), nullable=True, index=True)
+    symbol = Column(String(50), nullable=False)
+    trading_mode = Column(String(20), default="PAPER", nullable=False)
+    transaction_type = Column(String(10), nullable=False)  # "BUY" or "SELL"
+    product = Column(String(20), default="MIS", nullable=False)  # "MIS", "CNC", "NRML"
+    order_type = Column(String(20), default="MARKET", nullable=False)  # "MARKET", "LIMIT", "SL", "SL-M"
+    quantity = Column(Integer, nullable=False)
+    price = Column(Float, default=0.0)
+    trigger_price = Column(Float, nullable=True)
+    stop_loss = Column(Float, nullable=True)
+    target_price = Column(Float, nullable=True)
+    status = Column(String(20), default="COMPLETE", nullable=False)  # "COMPLETE", "OPEN", "CANCELLED", "REJECTED"
+    average_price = Column(Float, default=0.0)
+    trade_id = Column(Integer, ForeignKey("trades.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="live_orders")
+
+
+class LivePosition(Base):
+    __tablename__ = "live_positions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    symbol = Column(String(50), nullable=False)
+    product = Column(String(20), default="MIS", nullable=False)
+    trading_mode = Column(String(20), default="PAPER", nullable=False)
+    quantity = Column(Integer, default=0, nullable=False)  # positive for LONG, negative for SHORT, 0 for closed
+    buy_avg_price = Column(Float, default=0.0)
+    sell_avg_price = Column(Float, default=0.0)
+    realized_pnl = Column(Float, default=0.0)
+    unrealized_pnl = Column(Float, default=0.0)
+    status = Column(String(20), default="OPEN", nullable=False)  # "OPEN" or "CLOSED"
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="live_positions")
+
