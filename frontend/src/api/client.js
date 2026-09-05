@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = 'http://127.0.0.1:8765';
 
 const api = axios.create({ baseURL: API_BASE });
 
@@ -89,6 +89,14 @@ export const settingsAPI = {
   getEmail: () => api.get('/settings/email'),
   updateEmail: (data) => api.put('/settings/email', data),
   testEmail: () => api.post('/settings/email/test'),
+};
+
+// ─── AI Coach (V2+) ───────────────────────────────────────────────
+export const aiAPI = {
+  preTradeCheck: (data) => api.post('/ai/pre-trade-check', data),
+  chat: (data) => api.post('/ai/chat', data),
+  dailyBriefing: (language = 'en') => api.get('/ai/daily-briefing', { params: { language } }),
+  emotionalAlert: (data) => api.post('/ai/emotional-alert', data),
 };
 
 export default api;

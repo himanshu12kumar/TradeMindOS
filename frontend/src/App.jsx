@@ -11,6 +11,8 @@ import HistoryPage from './pages/HistoryPage';
 import BehaviourPage from './pages/BehaviourPage';
 import InsightsPage from './pages/InsightsPage';
 import SettingsPage from './pages/SettingsPage';
+import AIBot from './components/AIBot';
+import useBotMonitor from './hooks/useBotMonitor';
 
 function ProtectedRoute({ children }) {
   const { user } = useAuth();
@@ -26,6 +28,7 @@ function AuthRoute({ children }) {
 
 function AppLayout() {
   const { user } = useAuth();
+  const monitorStats = useBotMonitor(user ? 25000 : null);
   return (
     <>
       {user && <Navbar />}
@@ -48,6 +51,7 @@ function AppLayout() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      {user && <AIBot monitorStats={monitorStats} />}
     </>
   );
 }

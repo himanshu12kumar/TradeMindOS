@@ -345,3 +345,119 @@ Update digest preferences.
 ### POST `/settings/email/test`
 Send a test digest email immediately to the logged-in user's email address.
 Requires SMTP configured in `.env`.
+
+---
+
+## AI Trading Coach (V2+)
+
+### POST `/ai/pre-trade-check`
+Runs an authoritative pre-trade discipline and risk evaluation against daily plan, trade limits, consecutive losses, and emotional triggers.
+
+**Request Body:**
+```json
+{
+  "symbol": "NIFTY50",
+  "setup_type": "Breakout",
+  "entry_price": 22400.0,
+  "stop_loss": 22350.0,
+  "target_price": 22500.0,
+  "quantity": 50,
+  "fomo": 4,
+  "stress": 3,
+  "anger": 2,
+  "confidence": 8
+}
+```
+
+**Response (200):**
+```json
+{
+  "risk_level": "LOW",
+  "should_block": false,
+  "urgency": "normal",
+  "violations": [],
+  "warnings": [],
+  "voice_message": "Pre-trade check passed for NIFTY50. Setup looks aligned with your plan. Stick to your stop loss and exit plan.",
+  "coaching_message": "Setup aligned. You are within your daily trade limit...",
+  "trade_count_today": 1,
+  "max_trades": 3,
+  "pnl_today": 250.0,
+  "consecutive_losses": 0
+}
+```
+
+---
+
+### POST `/ai/chat`
+Interactive context-aware chat with the personal AI trading mentor.
+
+**Request Body:**
+```json
+{
+  "message": "Should I take one more trade today?",
+  "history": [
+    {"role": "user", "content": "How am I doing today?"},
+    {"role": "assistant", "content": "You have 1 trade left..."}
+  ]
+}
+```
+
+**Response (200):**
+```json
+{
+  "reply": "You have 1 trade left in your plan today...",
+  "trader_context": {
+    "trade_count_today": 2,
+    "max_trades": 3,
+    "pnl_today": 450.0,
+    "consecutive_losses": 0
+  }
+}
+```
+
+---
+
+### GET `/ai/daily-briefing`
+Returns today's morning discipline briefing tailored to the trader's plan status.
+
+**Response (200):**
+```json
+{
+  "briefing": "Good morning, Trader. Your plan is set for NIFTY50...",
+  "has_plan": true,
+  "plan_locked": true,
+  "max_trades": 3,
+  "max_loss_amount": 1000.0
+}
+```
+
+---
+
+### POST `/ai/emotional-alert`
+Triggers immediate real-time intervention when FOMO, stress, or anger levels spike.
+
+**Request Body:**
+```json
+{
+  "fomo": 8,
+  "stress": 7,
+  "anger": 3,
+  "confidence": 4
+}
+```
+
+**Response (200):**
+```json
+{
+  "is_alert": true,
+  "is_critical": false,
+  "voice_message": "Warning! FOMO score is 8 out of 10. Do not chase missed candles.",
+  "advice": "You are feeling intense FOMO. Step away from the screen for 5 minutes.",
+  "scores": {
+    "fomo": 8,
+    "stress": 7,
+    "anger": 3,
+    "confidence": 4
+  }
+}
+```

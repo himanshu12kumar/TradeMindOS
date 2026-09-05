@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { tradeAPI, planAPI } from '../api/client';
+import { tradeAPI, planAPI, aiAPI } from '../api/client';
 import ImpulseAlert from './ImpulseAlert';
+import voiceAlert from '../services/VoiceAlert';
 
 const SETUP_TYPES = ['Breakout', 'Retest / Pullback', 'Reversal', 'Range Bound', 'Momentum', 'Gap Fill', 'Other'];
 const EXIT_REASONS = ['TARGET', 'STOP_LOSS', 'FEAR', 'GREED', 'MANUAL'];
@@ -24,9 +25,12 @@ function EmotionalSlider({ label, value, onChange }) {
 const defaultEmotional = { confidence: 5, stress: 5, fomo: 5, anger: 5, patience: 5 };
 
 export default function TradeForm() {
-  const [step, setStep] = useState(1); // 1 = Pre-Trade Checklist, 2 = Trade Entry
+  const [step, setStep] = useState(1); // 1 = Pre-Trade Checklist, 2 = Trade Entry, 3 = AI Review
   const [plan, setPlan] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiReview, setAiReview] = useState(null);
+  const [overrideBlock, setOverrideBlock] = useState(false);
   const [alert, setAlert] = useState(null); // { type, message, onConfirm }
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -119,17 +123,46 @@ export default function TradeForm() {
     }
   };
 
-  const handleSubmit = () => {
-    // Basic validation
+  const runAIReview = async () => {
     if (!trade.entry_price || !trade.quantity) {
       showError('Entry price and quantity are required');
       return;
     }
-    doSubmit();
+    setAiLoading(true);
+    try {
+      const currentLang = localStorage.getItem('tm_bot_lang') || 'en';
+      const payload = {
+        symbol: trade.symbol || (plan?.market || 'NIFTY50'),
+        setup_type: trade.setup_type || null,
+        entry_price: parseFloat(trade.entry_price) || 0,
+        stop_loss: trade.stop_loss ? parseFloat(trade.stop_loss) : null,
+        target_price: trade.target_price ? parseFloat(trade.target_price) : null,
+        quantity: parseInt(trade.quantity) || 1,
+        fomo: emotionalBefore.fomo,
+        stress: emotionalBefore.stress,
+        anger: emotionalBefore.anger,
+        confidence: emotionalBefore.confidence,
+        language: currentLang,
+      };
+      const { data } = await aiAPI.preTradeCheck(payload);
+      setAiReview(data);
+      setStep(3);
+
+      if (data?.voice_message) {
+        voiceAlert.speak(data.voice_message, data.urgency || 'normal', currentLang);
+      }
+    } catch (err) {
+      // Fallback: proceed directly to submit if AI call fails
+      doSubmit();
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const resetForm = () => {
     setStep(1);
+    setAiReview(null);
+    setOverrideBlock(false);
     setChecklist({ setup_conditions_met: false, sl_is_defined: false, within_max_trades: false });
     setEmotionalBefore({ ...defaultEmotional });
     setTrade({ symbol: '', setup_type: '', entry_price: '', exit_price: '', stop_loss: '', target_price: '', quantity: '', exit_reason: '', notes: '' });
@@ -198,9 +231,14 @@ export default function TradeForm() {
             <span>Pre-Trade Check</span>
           </div>
           <div className="step-divider" />
-          <div className={`step ${step >= 2 ? 'active' : ''}`}>
-            <div className="step-num">2</div>
+          <div className={`step ${step >= 2 ? 'active' : ''} ${step > 2 ? 'done' : ''}`}>
+            <div className="step-num">{step > 2 ? '✓' : '2'}</div>
             <span>Trade Entry</span>
+          </div>
+          <div className="step-divider" />
+          <div className={`step ${step >= 3 ? 'active' : ''}`}>
+            <div className="step-num">3</div>
+            <span>AI Review</span>
           </div>
         </div>
 
@@ -387,14 +425,303 @@ export default function TradeForm() {
               <button
                 className="btn btn-primary btn-lg"
                 style={{ flex: 1 }}
-                onClick={handleSubmit}
-                disabled={submitting}
+                onClick={runAIReview}
+                disabled={aiLoading || submitting}
               >
-                {submitting
-                  ? <><div className="spinner" /> Logging...</>
-                  : !checklistAll
-                    ? '⚡ Log Trade (Flagged)'
-                    : '⚡ Log Trade'}
+                {aiLoading ? (
+                  <><div className="spinner" /> AI Coach Reviewing...</>
+                ) : (
+                  '🤖 Run AI Pre-Trade Review →'
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 3: AI Pre-Trade Review ───────────────────────────── */}
+        {step === 3 && aiReview && (
+          <div className="animate-in">
+            {/* Risk Badge Card */}
+            <div
+              className="card"
+              style={{
+                marginBottom: 24,
+                border: `1px solid ${
+                  aiReview.risk_level === 'CRITICAL'
+                    ? 'rgba(239, 68, 68, 0.5)'
+                    : aiReview.risk_level === 'HIGH'
+                    ? 'rgba(245, 158, 11, 0.5)'
+                    : aiReview.risk_level === 'MEDIUM'
+                    ? 'rgba(56, 189, 248, 0.4)'
+                    : 'rgba(34, 197, 94, 0.4)'
+                }`,
+                backgroundColor:
+                  aiReview.risk_level === 'CRITICAL'
+                    ? 'rgba(239, 68, 68, 0.08)'
+                    : aiReview.risk_level === 'HIGH'
+                    ? 'rgba(245, 158, 11, 0.08)'
+                    : 'rgba(15, 23, 42, 0.7)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: '50%',
+                      background:
+                        aiReview.risk_level === 'CRITICAL'
+                          ? 'linear-gradient(135deg, #ef4444, #b91c1c)'
+                          : aiReview.risk_level === 'HIGH'
+                          ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+                          : 'linear-gradient(135deg, #0284c7, #10b981)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '18px',
+                      boxShadow: '0 0 12px rgba(56, 189, 248, 0.4)',
+                    }}
+                  >
+                    🤖
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.1rem' }}>TradeMind Coach Assessment</h3>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      Pre-Trade Discipline & Risk Verification
+                    </div>
+                  </div>
+                </div>
+
+                {/* Risk Level Chip */}
+                <div
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: 9999,
+                    fontWeight: 700,
+                    fontSize: '0.78rem',
+                    letterSpacing: '0.5px',
+                    backgroundColor:
+                      aiReview.risk_level === 'CRITICAL'
+                        ? 'rgba(239, 68, 68, 0.25)'
+                        : aiReview.risk_level === 'HIGH'
+                        ? 'rgba(245, 158, 11, 0.25)'
+                        : aiReview.risk_level === 'MEDIUM'
+                        ? 'rgba(56, 189, 248, 0.2)'
+                        : 'rgba(34, 197, 94, 0.2)',
+                    color:
+                      aiReview.risk_level === 'CRITICAL'
+                        ? '#ef4444'
+                        : aiReview.risk_level === 'HIGH'
+                        ? '#f59e0b'
+                        : aiReview.risk_level === 'MEDIUM'
+                        ? '#38bdf8'
+                        : '#22c55e',
+                    border: `1px solid ${
+                      aiReview.risk_level === 'CRITICAL'
+                        ? '#ef4444'
+                        : aiReview.risk_level === 'HIGH'
+                        ? '#f59e0b'
+                        : '#22c55e'
+                    }`,
+                  }}
+                >
+                  {aiReview.risk_level} RISK
+                </div>
+              </div>
+
+              {/* Coaching Message */}
+              <div
+                style={{
+                  padding: '16px',
+                  borderRadius: 12,
+                  backgroundColor: 'rgba(30, 41, 59, 0.7)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  marginBottom: 16,
+                  position: 'relative',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Coach Guidance
+                  </span>
+                  <button
+                    onClick={() => voiceAlert.speak(aiReview.voice_message || aiReview.coaching_message, aiReview.urgency, localStorage.getItem('tm_bot_lang') || 'en')}
+                    style={{
+                      background: 'rgba(56, 189, 248, 0.15)',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      color: '#38bdf8',
+                      borderRadius: 6,
+                      padding: '4px 10px',
+                      fontSize: '0.75rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    🔊 Hear Voice Alert
+                  </button>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.92rem', lineHeight: '1.5', color: '#f8fafc' }}>
+                  "{aiReview.coaching_message}"
+                </p>
+              </div>
+
+              {/* Violations List (if any) */}
+              {aiReview.violations?.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', marginBottom: 6 }}>
+                    Rule Violations:
+                  </div>
+                  {aiReview.violations.map((v, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 8,
+                        backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        color: '#fca5a5',
+                        fontSize: '0.84rem',
+                        marginBottom: 6,
+                      }}
+                    >
+                      {v}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Warnings List (if any) */}
+              {aiReview.warnings?.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f59e0b', marginBottom: 6 }}>
+                    Cautionary Flags:
+                  </div>
+                  {aiReview.warnings.map((w, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                        border: '1px solid rgba(245, 158, 11, 0.25)',
+                        color: '#fde68a',
+                        fontSize: '0.82rem',
+                        marginBottom: 6,
+                      }}
+                    >
+                      {w}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Trader Today Summary */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: 10,
+                  marginTop: 12,
+                  padding: 12,
+                  borderRadius: 10,
+                  backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  textAlign: 'center',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Trades Today</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#f8fafc' }}>
+                    {aiReview.trade_count_today} / {aiReview.max_trades}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Consecutive Losses</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: aiReview.consecutive_losses >= 2 ? '#ef4444' : '#f8fafc' }}>
+                    {aiReview.consecutive_losses}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Today P&L</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: aiReview.pnl_today >= 0 ? '#10b981' : '#ef4444' }}>
+                    ₹{aiReview.pnl_today?.toFixed(2)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* If Blocked: Override option or cancel */}
+            {aiReview.should_block && (
+              <div
+                className="card"
+                style={{
+                  marginBottom: 24,
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <span style={{ fontSize: '20px' }}>🛑</span>
+                  <div style={{ fontWeight: 700, color: '#ef4444' }}>Trade Blocked by Discipline Rules</div>
+                </div>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 16 }}>
+                  The TradeMind Coach strongly advises walking away from the market. If you must proceed, you must consciously acknowledge that this is a rule breach.
+                </p>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    cursor: 'pointer',
+                    fontSize: '0.84rem',
+                    color: '#fca5a5',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={overrideBlock}
+                    onChange={(e) => setOverrideBlock(e.target.checked)}
+                    style={{ width: 16, height: 16 }}
+                  />
+                  I consciously acknowledge I am violating my trading plan and accept this penalty.
+                </label>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                className="btn btn-ghost btn-lg"
+                onClick={() => setStep(2)}
+                style={{ flex: 0.4 }}
+              >
+                ← Back & Edit
+              </button>
+              <button
+                className="btn btn-primary btn-lg"
+                style={{
+                  flex: 1,
+                  background:
+                    aiReview.should_block && !overrideBlock
+                      ? 'rgba(255, 255, 255, 0.1)'
+                      : aiReview.risk_level === 'CRITICAL'
+                      ? 'linear-gradient(135deg, #ef4444, #dc2626)'
+                      : undefined,
+                  cursor: aiReview.should_block && !overrideBlock ? 'not-allowed' : 'pointer',
+                }}
+                onClick={doSubmit}
+                disabled={submitting || (aiReview.should_block && !overrideBlock)}
+              >
+                {submitting ? (
+                  <><div className="spinner" /> Logging Trade...</>
+                ) : aiReview.should_block ? (
+                  overrideBlock ? '⚠️ Force Log Rule-Breach Trade' : '🛑 Blocked (Rule Limit)'
+                ) : (
+                  '⚡ Execute & Log Trade'
+                )}
               </button>
             </div>
           </div>
