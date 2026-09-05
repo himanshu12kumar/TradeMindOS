@@ -14,9 +14,13 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""       # Gmail App Password
     FROM_EMAIL: str = ""          # same as SMTP_USER usually
     FROM_NAME: str = "TradeMind OS"
+    # ── AI Coach Settings ──────────────────────────────────────────
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-1.5-flash"
 
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 
 settings = Settings()

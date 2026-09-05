@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import Base, engine
 from routers import auth, plans, trades, behaviour, scores
-from routers import history, insights, email_settings
+from routers import history, insights, email_settings, ai
 from scheduler import start_scheduler, stop_scheduler
 
 # ─── Create / migrate tables ──────────────────────────────────────────────────
@@ -22,7 +22,14 @@ app = FastAPI(
 # ─── CORS ─────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        "http://127.0.0.1:5174",
+        "http://localhost:5174",
+        "http://127.0.0.1:4173",
+        "http://localhost:4173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,6 +56,7 @@ app.include_router(scores.router)
 app.include_router(history.router)
 app.include_router(insights.router)
 app.include_router(email_settings.router)
+app.include_router(ai.router)
 
 
 @app.get("/", tags=["health"])

@@ -212,3 +212,73 @@ class WeeklyReviewOut(BaseModel):
     top_mistake: Optional[str]
     best_habit: Optional[str]
     focus_next_week: str
+
+
+# ─── AI Coach (V2+) ───────────────────────────────────────────────────────────
+
+class PreTradeCheckRequest(BaseModel):
+    symbol: Optional[str] = "NIFTY50"
+    setup_type: Optional[str] = None
+    entry_price: float = 0.0
+    stop_loss: Optional[float] = None
+    target_price: Optional[float] = None
+    quantity: Optional[int] = 1
+    fomo: Optional[int] = Field(default=5, ge=1, le=10)
+    stress: Optional[int] = Field(default=5, ge=1, le=10)
+    anger: Optional[int] = Field(default=5, ge=1, le=10)
+    confidence: Optional[int] = Field(default=5, ge=1, le=10)
+    language: Optional[str] = "en"
+
+
+class PreTradeCheckResponse(BaseModel):
+    risk_level: str
+    should_block: bool
+    urgency: str
+    violations: List[str]
+    warnings: List[str]
+    voice_message: str
+    coaching_message: str
+    trade_count_today: int
+    max_trades: int
+    pnl_today: float
+    consecutive_losses: int
+
+
+class AIChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class AIChatRequest(BaseModel):
+    message: str
+    history: Optional[List[AIChatMessage]] = None
+    language: Optional[str] = "en"
+
+
+class AIChatResponse(BaseModel):
+    reply: str
+    trader_context: dict
+
+
+class EmotionalAlertRequest(BaseModel):
+    fomo: int = Field(default=5, ge=1, le=10)
+    stress: int = Field(default=5, ge=1, le=10)
+    anger: int = Field(default=5, ge=1, le=10)
+    confidence: int = Field(default=5, ge=1, le=10)
+    language: Optional[str] = "en"
+
+
+class EmotionalAlertResponse(BaseModel):
+    is_alert: bool
+    is_critical: bool
+    voice_message: str
+    advice: str
+    scores: dict
+
+
+class DailyBriefingResponse(BaseModel):
+    briefing: str
+    has_plan: bool
+    plan_locked: bool
+    max_trades: int
+    max_loss_amount: float
