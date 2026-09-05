@@ -4,8 +4,9 @@ import { useAuth } from '../context/AuthContext';
 
 const NAV_LINKS = [
   { to: '/',         icon: '🏠', label: 'Dashboard'  },
+  { to: '/terminal', icon: '⚡', label: 'Trade Live', isLive: true },
   { to: '/plan',     icon: '📋', label: 'Daily Plan'  },
-  { to: '/trade',    icon: '⚡', label: 'Log Trade'   },
+  { to: '/trade',    icon: '📝', label: 'Log Trade'   },
   { to: '/history',  icon: '📜', label: 'History'     },
   { to: '/insights', icon: '📈', label: 'Insights'    },
   { to: '/behaviour',icon: '🔍', label: 'Behaviour'   },
@@ -57,6 +58,29 @@ export default function Navbar() {
 
           {/* Desktop: User + Settings + Logout */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }} className="hide-on-mobile">
+            {/* Direct Live Terminal Launcher Button */}
+            <Link
+              to="/terminal"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 14px',
+                borderRadius: 8,
+                background: 'linear-gradient(135deg, #f59e0b, #ef4444)',
+                color: '#ffffff',
+                textDecoration: 'none',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                boxShadow: '0 0 16px rgba(245, 158, 11, 0.4)',
+                transition: 'transform 0.15s, box-shadow 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 0 22px rgba(245, 158, 11, 0.6)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 0 16px rgba(245, 158, 11, 0.4)'; }}
+            >
+              <span>⚡</span> Trade Live
+            </Link>
+
             <Link to="/settings" title="Settings" style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               width: 34, height: 34, borderRadius: 8,
@@ -125,6 +149,27 @@ export default function Navbar() {
           }}>
             {NAV_LINKS.map(item => {
               const active = isActive(item.to);
+              if (item.isLive) {
+                return (
+                  <Link key={item.to} to={item.to} style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '8px 12px',
+                    margin: '3px 4px',
+                    borderRadius: 6,
+                    textDecoration: 'none',
+                    fontSize: '0.8rem', fontWeight: 800,
+                    color: '#ffffff',
+                    background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(239, 68, 68, 0.25))',
+                    border: '1px solid rgba(245, 158, 11, 0.4)',
+                    boxShadow: '0 0 10px rgba(245, 158, 11, 0.15)',
+                    transition: 'all 0.15s',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    <span>⚡</span>
+                    {item.label}
+                  </Link>
+                );
+              }
               return (
                 <Link key={item.to} to={item.to} style={{
                   display: 'flex', alignItems: 'center', gap: 6,

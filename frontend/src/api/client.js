@@ -99,4 +99,19 @@ export const aiAPI = {
   emotionalAlert: (data) => api.post('/ai/emotional-alert', data),
 };
 
+// ─── Live Trading Terminal & Broker (V2+) ─────────────────────────
+export const terminalAPI = {
+  getMarketWatch: () => api.get('/terminal/market-watch'),
+  getChart: (symbol, timeframe = '5m') => api.get(`/terminal/chart/${encodeURIComponent(symbol)}`, { params: { timeframe } }),
+  placeOrder: (data) => api.post('/terminal/orders', data),
+  getOrders: () => api.get('/terminal/orders'),
+  cancelOrder: (orderId) => api.delete(`/terminal/orders/${orderId}`),
+  getPositions: () => api.get('/terminal/positions'),
+  squareOff: (symbol = null) => api.post('/terminal/positions/square-off', { symbol }),
+  getBrokerConfig: () => api.get('/terminal/broker-config'),
+  updateBrokerConfig: (data) => api.post('/terminal/broker-config', data),
+  exchangeKiteToken: (requestToken) => api.post('/terminal/broker-token', { request_token: requestToken }),
+};
+
 export default api;
+

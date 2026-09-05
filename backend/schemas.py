@@ -282,3 +282,99 @@ class DailyBriefingResponse(BaseModel):
     plan_locked: bool
     max_trades: int
     max_loss_amount: float
+
+
+# ─── Live Trading Terminal & Broker (V2+) ────────────────────────────────────
+
+class BrokerConfigIn(BaseModel):
+    broker_name: Optional[str] = "ZERODHA"
+    api_key: Optional[str] = None
+    api_secret: Optional[str] = None
+    trading_mode: Optional[str] = "PAPER"  # "PAPER" or "REAL"
+    paper_balance: Optional[float] = None
+
+
+class BrokerConfigOut(BaseModel):
+    broker_name: str
+    api_key: Optional[str] = None
+    api_secret_masked: Optional[str] = None
+    has_access_token: bool = False
+    trading_mode: str = "PAPER"
+    paper_balance: float = 100000.0
+    kite_login_url: Optional[str] = None
+
+
+class BrokerTokenExchangeIn(BaseModel):
+    request_token: str
+
+
+class TerminalOrderCreate(BaseModel):
+    symbol: str
+    transaction_type: str  # "BUY" or "SELL"
+    product: str = "MIS"   # "MIS", "CNC", "NRML"
+    order_type: str = "MARKET"  # "MARKET", "LIMIT", "SL", "SL-M"
+    quantity: int = Field(gt=0)
+    price: Optional[float] = 0.0
+    trigger_price: Optional[float] = None
+    stop_loss: Optional[float] = None
+    target_price: Optional[float] = None
+    setup_type: Optional[str] = None
+    override_risk_gate: Optional[bool] = False
+
+
+class TerminalOrderOut(BaseModel):
+    id: int
+    broker_order_id: Optional[str] = None
+    symbol: str
+    trading_mode: str
+    transaction_type: str
+    product: str
+    order_type: str
+    quantity: int
+    price: float
+    trigger_price: Optional[float] = None
+    stop_loss: Optional[float] = None
+    target_price: Optional[float] = None
+    status: str
+    average_price: float
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TerminalPositionOut(BaseModel):
+    id: int
+    symbol: str
+    product: str
+    trading_mode: str
+    quantity: int
+    buy_avg_price: float
+    sell_avg_price: float
+    ltp: float
+    realized_pnl: float
+    unrealized_pnl: float
+    total_pnl: float
+    status: str
+
+    class Config:
+        from_attributes = True
+
+
+class MarketInstrumentOut(BaseModel):
+    symbol: str
+    name: str
+    segment: str
+    ltp: float
+    change: float
+    change_percent: float
+    high: float
+    low: float
+    open: float
+    close: float
+    lot_size: int = 1
+
+
+class SquareOffRequest(BaseModel):
+    symbol: Optional[str] = None  # None = square off all
+

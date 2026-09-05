@@ -220,17 +220,30 @@ export default function Dashboard() {
         )}
 
         {/* Quick Actions */}
-        <div className="animate-in" style={{ marginTop: 24, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, animationDelay: '0.2s' }}>
+        <div className="animate-in" style={{ marginTop: 24, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, animationDelay: '0.2s' }}>
           {[
-            { to: '/plan',   label: 'Update Plan',    icon: '📋', desc: 'Review & lock your plan',   cls: 'btn-ghost'   },
-            { to: '/trade',  label: 'Log a Trade',    icon: '⚡', desc: 'Pre-validate your entry',   cls: 'btn-primary' },
-            { to: '/review', label: 'Weekly Review',  icon: '🏆', desc: 'Analyze your week',         cls: 'btn-ghost'   },
-          ].map(({ to, label, icon, desc, cls }) => (
+            { to: '/terminal', label: 'Trade Live',   icon: '⚡', desc: 'Paper & Zerodha trading desk', isLive: true },
+            { to: '/plan',     label: 'Daily Plan',   icon: '📋', desc: 'Review & lock your plan' },
+            { to: '/trade',    label: 'Log a Trade',  icon: '📝', desc: 'Manual journal & checks' },
+            { to: '/review',   label: 'Weekly Review',icon: '🏆', desc: 'Analyze your performance' },
+          ].map(({ to, label, icon, desc, isLive }) => (
             <Link key={to} to={to} style={{ textDecoration: 'none' }}>
-              <div className="card" style={{ textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
+              <div
+                className="card"
+                style={{
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  border: isLive ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid var(--border)',
+                  background: isLive ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(239, 68, 68, 0.08))' : 'var(--bg-card)',
+                  boxShadow: isLive ? '0 0 20px rgba(245, 158, 11, 0.15)' : 'none',
+                }}
+              >
                 <div style={{ fontSize: '2rem', marginBottom: 12 }}>{icon}</div>
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>{label}</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{desc}</div>
+                <div style={{ fontWeight: 800, marginBottom: 4, color: isLive ? '#f59e0b' : 'var(--text-primary)' }}>
+                  {label}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: isLive ? '#cbd5e1' : 'var(--text-muted)' }}>{desc}</div>
               </div>
             </Link>
           ))}
