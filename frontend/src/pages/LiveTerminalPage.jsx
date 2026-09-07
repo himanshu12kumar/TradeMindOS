@@ -51,7 +51,8 @@ export default function LiveTerminalPage() {
 
   // Modals & Interceptions
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [riskAlertModal, setRiskAlertModal] = useState(null); // { title, message, onProceed }
+  const [riskAlertModal, setRiskAlertModal] = useState(null); // { title, message, onProceed, actionLabel, canOverride }
+  const [hasDailyPlan, setHasDailyPlan] = useState(null); // null = checking, false = no plan, true = plan set
   const [toast, setToast] = useState({ show: false, text: '', type: 'info' });
 
   const pollIntervalRef = useRef(null);
@@ -67,19 +68,50 @@ export default function LiveTerminalPage() {
     showToast(`Chart setup synced: SL ₹${sl} | Target ₹${target} applied to Order Pad!`, 'info');
   };
 
+  const activeSymbolRef = useRef(activeSymbol);
+  const timeframeRef = useRef(timeframe);
+
+  useEffect(() => {
+    activeSymbolRef.current = activeSymbol;
+  }, [activeSymbol]);
+
+  useEffect(() => {
+    timeframeRef.current = timeframe;
+  }, [timeframe]);
+
   // ── 1. Initial Load & Polling ─────────────────────────────────────────────
   useEffect(() => {
+    // Auto-detect redirect from Zerodha Kite Login
+    const params = new URLSearchParams(window.location.search);
+    const reqToken = params.get('request_token');
+    const authStatus = params.get('status');
+
+    if (reqToken && authStatus !== 'cancelled') {
+      showToast('Authenticating Zerodha Kite session...', 'info');
+      terminalAPI
+        .exchangeKiteToken(reqToken)
+        .then((res) => {
+          showToast(res.data?.message || 'Zerodha Kite connected successfully! Real mode active.', 'success');
+          voiceAlert.speak('Zerodha Kite connected successfully. Real trading mode is active.', 'normal');
+          fetchBrokerConfig();
+          window.history.replaceState({}, document.title, window.location.pathname);
+        })
+        .catch((err) => {
+          showToast(err.response?.data?.detail || 'Kite token authorization failed', 'error');
+        });
+    }
+
     fetchMarketWatch();
     fetchPositions();
     fetchOrders();
     fetchBrokerConfig();
     fetchTradeMindPlan();
 
-    // Poll market ticks every 2.5s
+    // Fast 1.5s polling for realistic live market ticks and smooth candles
     pollIntervalRef.current = setInterval(() => {
       fetchMarketWatch(true);
       fetchPositions(true);
-    }, 2500);
+    }, 1500);
 
     return () => clearInterval(pollIntervalRef.current);
   }, []);
@@ -103,7 +135,54 @@ export default function LiveTerminalPage() {
   const fetchMarketWatch = async (isBackground = false) => {
     try {
       const res = await terminalAPI.getMarketWatch();
-      setWatchlist(res.data);
+      const watchData = res.data || [];
+      setWatchlist(watchData);
+
+      // Live candle real-time tick streaming into the active chart
+      const curSymbol = activeSymbolRef.current;
+      const curTf = timeframeRef.current;
+      const activeTick = watchData.find((w) => w.symbol === curSymbol);
+
+      if (activeTick && activeTick.ltp) {
+        setChartCandles((prevCandles) => {
+          if (!prevCandles || prevCandles.length === 0) return prevCandles;
+          const candlesCopy = [...prevCandles];
+          const lastCandle = { ...candlesCopy[candlesCopy.length - 1] };
+          const nowSec = Math.floor(Date.now() / 1000);
+
+          const tfSecMap = {
+            '1m': 60,
+            '5m': 300,
+            '15m': 900,
+            '1h': 3600,
+            '1D': 86400,
+          };
+          const intervalSec = tfSecMap[curTf] || 300;
+
+          // If candle interval has expired, spawn a brand new live candle smoothly
+          if (nowSec - (lastCandle.time || 0) >= intervalSec) {
+            const newCandle = {
+              time: nowSec,
+              open: activeTick.ltp,
+              high: activeTick.ltp,
+              low: activeTick.ltp,
+              close: activeTick.ltp,
+              volume: Math.floor(Math.random() * 80 + 30),
+            };
+            candlesCopy.push(newCandle);
+            if (candlesCopy.length > 250) candlesCopy.shift();
+          } else {
+            // Live micro-movement on active candle
+            lastCandle.close = activeTick.ltp;
+            lastCandle.high = Math.max(lastCandle.high, activeTick.ltp);
+            lastCandle.low = Math.min(lastCandle.low, activeTick.ltp);
+            lastCandle.volume = (lastCandle.volume || 100) + Math.floor(Math.random() * 25 + 5);
+            candlesCopy[candlesCopy.length - 1] = lastCandle;
+          }
+
+          return candlesCopy;
+        });
+      }
     } catch (err) {
       if (!isBackground) showToast('Failed to fetch market watch', 'error');
     }
@@ -155,6 +234,7 @@ export default function LiveTerminalPage() {
         tradeAPI.list(),
       ]);
       const plan = pRes.status === 'fulfilled' ? pRes.value.data : null;
+      setHasDailyPlan(!!plan);
       const trades = tRes.status === 'fulfilled' ? tRes.value.data : [];
 
       const todayStr = new Date().toISOString().slice(0, 10);
@@ -178,6 +258,26 @@ export default function LiveTerminalPage() {
 
   // ── 3. Execute Order Handler ──────────────────────────────────────────────
   const handleExecuteOrder = async (overrideRisk = false) => {
+    // 1. Strict Discipline Gate: Must have an approved Daily Plan before punching trades!
+    if (hasDailyPlan === false) {
+      const isHindi = voiceAlert.getLanguage() === 'hi';
+      const speechText = isHindi
+        ? 'ट्रेड रोक दिया गया! आपने आज का डेली ट्रेडिंग प्लान सेट नहीं किया है। बिना प्लान के ट्रेड करना नियमों के खिलाफ़ है। कृपया पहले अपना प्लान सेट करें।'
+        : 'Trade blocked! You have not set your daily trading plan for today. A disciplined trader never enters the market without a plan. Please set your plan first.';
+
+      voiceAlert.speak(speechText, 'urgent');
+      setRiskAlertModal({
+        title: isHindi ? '📋 डेली ट्रेडिंग प्लान आवश्यक' : '📋 Daily Plan Required Before Trading',
+        message: isHindi
+          ? 'TradeMind OS अनुशासन नियम: आज का डेली प्लान बनाए बिना आप TradeLive पर ट्रेड नहीं ले सकते। मार्केट में प्रवेश करने से पहले अपने मैक्स ट्रेड्स, रिस्क लिमिट और सेटअप तय करें।'
+          : 'TradeMind OS discipline rule: You cannot punch trades on TradeLive without an active Daily Plan for today. Please define your trade limits, maximum loss, and market bias first.',
+        canOverride: false,
+        actionLabel: isHindi ? "आज का प्लान सेट करें" : "Set Today's Daily Plan",
+        onProceed: () => navigate('/daily-plan'),
+      });
+      return;
+    }
+
     if (!quantity || quantity <= 0) {
       showToast('Quantity must be greater than 0', 'error');
       return;
@@ -207,7 +307,20 @@ export default function LiveTerminalPage() {
       fetchTradeMindPlan();
     } catch (err) {
       const errData = err.response?.data?.detail;
-      if (errData && errData.error_code === 'TRADE_LIMIT_REACHED') {
+      if (errData && errData.error_code === 'NO_DAILY_PLAN') {
+        const isHindi = voiceAlert.getLanguage() === 'hi';
+        const speechText = isHindi
+          ? 'ट्रेड रोक दिया गया! आपने आज का डेली ट्रेडिंग प्लान सेट नहीं किया है। बिना प्लान के ट्रेड करना नियमों के खिलाफ़ है। कृपया पहले अपना प्लान सेट करें।'
+          : 'Trade blocked! You have not set your daily trading plan for today. A disciplined trader never enters the market without a plan. Please set your plan first.';
+        voiceAlert.speak(speechText, 'urgent');
+        setRiskAlertModal({
+          title: isHindi ? '📋 डेली ट्रेडिंग प्लान आवश्यक' : '📋 Daily Plan Required Before Trading',
+          message: errData.message,
+          canOverride: false,
+          actionLabel: isHindi ? "आज का प्लान सेट करें" : "Set Today's Daily Plan",
+          onProceed: () => navigate('/daily-plan'),
+        });
+      } else if (errData && errData.error_code === 'TRADE_LIMIT_REACHED') {
         voiceAlert.speak('Trade limit reached. Your morning plan says stop trading.', 'urgent');
         setRiskAlertModal({
           title: '🛑 Trade Limit Reached',
@@ -373,17 +486,39 @@ export default function LiveTerminalPage() {
 
         {/* TradeMind Discipline HUD Strip */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }} className="hide-on-mobile">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
-            <span style={{ color: '#94a3b8' }}>Trades:</span>
-            <span
+          {hasDailyPlan === false ? (
+            <Link
+              to="/daily-plan"
               style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                background: 'rgba(245, 158, 11, 0.15)',
+                border: '1px solid rgba(245, 158, 11, 0.4)',
+                color: '#fbbf24',
+                fontSize: '0.75rem',
                 fontWeight: 700,
-                color: planStats.tradeCount >= planStats.maxTrades ? '#ef4444' : '#38bdf8',
+                textDecoration: 'none',
               }}
             >
-              {planStats.tradeCount} / {planStats.maxTrades}
-            </span>
-          </div>
+              <span>⚠️</span>
+              <span>No Daily Plan Set — Set Today's Plan →</span>
+            </Link>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
+              <span style={{ color: '#94a3b8' }}>Trades:</span>
+              <span
+                style={{
+                  fontWeight: 700,
+                  color: planStats.tradeCount >= planStats.maxTrades ? '#ef4444' : '#38bdf8',
+                }}
+              >
+                {planStats.tradeCount} / {planStats.maxTrades}
+              </span>
+            </div>
+          )}
 
           <div style={{ width: '1px', height: '18px', background: 'rgba(255, 255, 255, 0.1)' }} />
 
@@ -796,14 +931,14 @@ export default function LiveTerminalPage() {
                                   ord.status === 'COMPLETE'
                                     ? 'rgba(16, 185, 129, 0.15)'
                                     : ord.status === 'OPEN'
-                                    ? 'rgba(59, 130, 246, 0.15)'
-                                    : 'rgba(239, 68, 68, 0.15)',
+                                      ? 'rgba(59, 130, 246, 0.15)'
+                                      : 'rgba(239, 68, 68, 0.15)',
                                 color:
                                   ord.status === 'COMPLETE'
                                     ? '#34d399'
                                     : ord.status === 'OPEN'
-                                    ? '#60a5fa'
-                                    : '#fca5a5',
+                                      ? '#60a5fa'
+                                      : '#fca5a5',
                               }}
                             >
                               {ord.status}
@@ -1164,34 +1299,64 @@ export default function LiveTerminalPage() {
               </div>
             </div>
 
+            {/* Daily Plan Missing Warning Banner */}
+            {hasDailyPlan === false && (
+              <div
+                style={{
+                  marginBottom: '10px',
+                  padding: '8px 10px',
+                  background: 'rgba(245, 158, 11, 0.12)',
+                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '0.74rem',
+                  color: '#fbbf24',
+                  lineHeight: 1.3,
+                }}
+              >
+                <span>⚠️</span>
+                <span>
+                  <strong>No Daily Plan Set:</strong> TradeMind requires today's plan before punching trades.
+                </span>
+              </div>
+            )}
+
             {/* Place Order CTA Button */}
             <button
               type="button"
-              onClick={() => handlePlaceOrder()}
+              onClick={() => handleExecuteOrder(false)}
               disabled={isPlacingOrder}
               style={{
                 width: '100%',
                 padding: '12px',
                 borderRadius: '8px',
-                border: 'none',
+                border: hasDailyPlan === false ? '1px solid #f59e0b' : 'none',
                 background:
-                  txnType === 'BUY'
-                    ? 'linear-gradient(135deg, #10b981, #059669)'
-                    : 'linear-gradient(135deg, #ef4444, #dc2626)',
+                  hasDailyPlan === false
+                    ? 'linear-gradient(135deg, #b45309, #d97706)'
+                    : txnType === 'BUY'
+                      ? 'linear-gradient(135deg, #10b981, #059669)'
+                      : 'linear-gradient(135deg, #ef4444, #dc2626)',
                 color: '#ffffff',
                 fontWeight: 800,
                 fontSize: '0.9rem',
                 cursor: isPlacingOrder ? 'not-allowed' : 'pointer',
                 opacity: isPlacingOrder ? 0.7 : 1,
                 boxShadow:
-                  txnType === 'BUY'
-                    ? '0 4px 16px rgba(16, 185, 129, 0.35)'
-                    : '0 4px 16px rgba(239, 68, 68, 0.35)',
+                  hasDailyPlan === false
+                    ? '0 4px 16px rgba(245, 158, 11, 0.35)'
+                    : txnType === 'BUY'
+                      ? '0 4px 16px rgba(16, 185, 129, 0.35)'
+                      : '0 4px 16px rgba(239, 68, 68, 0.35)',
               }}
             >
               {isPlacingOrder
                 ? 'Routing Order...'
-                : `${txnType} ${quantity} ${activeInst.symbol} (${orderType})`}
+                : hasDailyPlan === false
+                  ? '📋 Set Daily Plan to Punch Trade'
+                  : `${txnType} ${quantity} ${activeInst.symbol} (${orderType})`}
             </button>
           </div>
         </div>
@@ -1233,40 +1398,85 @@ export default function LiveTerminalPage() {
             </p>
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-              <button
-                type="button"
-                onClick={() => setRiskAlertModal(null)}
-                style={{
-                  flex: 1,
-                  padding: '10px 16px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: '#2563eb',
-                  color: '#ffffff',
-                  fontWeight: 700,
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                }}
-              >
-                Respect Rule & Stop
-              </button>
-              {riskAlertModal.canOverride && (
-                <button
-                  type="button"
-                  onClick={riskAlertModal.onProceed}
-                  style={{
-                    padding: '10px 16px',
-                    borderRadius: '8px',
-                    border: '1px solid rgba(239, 68, 68, 0.4)',
-                    background: 'transparent',
-                    color: '#fca5a5',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Override Risk Gate
-                </button>
+              {riskAlertModal.actionLabel ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const proceed = riskAlertModal.onProceed;
+                      setRiskAlertModal(null);
+                      if (proceed) proceed();
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '10px 16px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                      color: '#ffffff',
+                      fontWeight: 700,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 12px rgba(245, 158, 11, 0.4)',
+                    }}
+                  >
+                    {riskAlertModal.actionLabel}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRiskAlertModal(null)}
+                    style={{
+                      padding: '10px 16px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      background: 'transparent',
+                      color: '#94a3b8',
+                      fontWeight: 600,
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Dismiss
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setRiskAlertModal(null)}
+                    style={{
+                      flex: 1,
+                      padding: '10px 16px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      fontWeight: 700,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Respect Rule & Stop
+                  </button>
+                  {riskAlertModal.canOverride && (
+                    <button
+                      type="button"
+                      onClick={riskAlertModal.onProceed}
+                      style={{
+                        padding: '10px 16px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(239, 68, 68, 0.4)',
+                        background: 'transparent',
+                        color: '#fca5a5',
+                        fontWeight: 600,
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Override Risk Gate
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>

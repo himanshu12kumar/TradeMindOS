@@ -124,6 +124,27 @@ def place_order(
         .all()
     )
 
+    # Guard: Daily plan required before punching trades
+    if not today_plan:
+        db.add(
+            BehaviourLog(
+                user_id=user_id,
+                event_type=EventType.RULE_BREAK,
+                description="Terminal blocked order: Attempted to punch trade without creating a Daily Plan for today.",
+            )
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error_code": "NO_DAILY_PLAN",
+                "message": (
+                    "🛑 DAILY PLAN REQUIRED! You cannot trade on TradeLive without setting today's Daily Plan first. "
+                    "Define your maximum trades, risk limits, and setups in TradeMind before entering the market."
+                ),
+            },
+        )
+
     # Guard: Max trades limit
     if today_plan and len(todays_trades) >= today_plan.max_trades:
         if not payload.override_risk_gate:
@@ -448,3 +469,70 @@ def exchange_kite_token(
         "user_name": res.get("user_name"),
         "user_id": res.get("user_id"),
     }
+
+
+@router.get("/broker-verify")
+def verify_broker_connection(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Verifies connection status to Zerodha Kite API and returns account holder name & available margin.
+    """
+    cred = _get_or_create_broker_cred(db, current_user.id)
+    if cred.trading_mode != "REAL":
+        return {
+            "mode": "PAPER",
+            "connected": True,
+            "has_access_token": False,
+            "message": "Paper Trading simulation active. (Virtual capital: ₹1,00,000)",
+            "paper_balance": cred.paper_balance,
+        }
+
+    if not cred.api_key or not cred.api_secret:
+        return {
+            "mode": "REAL",
+            "connected": False,
+            "has_access_token": False,
+            "error_code": "MISSING_KEYS",
+            "message": "API Key or API Secret is missing. Please save them in Broker Setup.",
+        }
+
+    if not cred.access_token:
+        return {
+            "mode": "REAL",
+            "connected": False,
+            "has_access_token": False,
+            "error_code": "NO_SESSION_TOKEN",
+            "message": "API credentials saved, but daily login authorization is required. Click 'Open Zerodha Kite Login' to authorize today's session.",
+        }
+
+    # Ping Zerodha with access_token
+    prof_res = ZerodhaKiteService.get_profile(cred.api_key, cred.access_token)
+    if not prof_res.get("success"):
+        return {
+            "mode": "REAL",
+            "connected": False,
+            "has_access_token": False,
+            "error_code": "TOKEN_EXPIRED",
+            "message": f"Zerodha session expired or invalid: {prof_res.get('error')}. Please re-authenticate today's session.",
+        }
+
+    prof_data = prof_res.get("data", {})
+    margin_res = ZerodhaKiteService.get_margins(cred.api_key, cred.access_token)
+    equity_margin = 0.0
+    if margin_res.get("success"):
+        equity_margin = margin_res.get("data", {}).get("equity", {}).get("available", {}).get("live_balance", 0.0)
+
+    return {
+        "mode": "REAL",
+        "connected": True,
+        "has_access_token": True,
+        "user_id": prof_data.get("user_id"),
+        "user_name": prof_data.get("user_name"),
+        "email": prof_data.get("email"),
+        "broker": prof_data.get("broker", "ZERODHA"),
+        "live_balance": equity_margin,
+        "message": f"Successfully connected to Zerodha account: {prof_data.get('user_name')} ({prof_data.get('user_id')})",
+    }
+

@@ -14,6 +14,8 @@ export default function BrokerSettingsModal({ isOpen, onClose, onConfigUpdated }
   });
   const [requestToken, setRequestToken] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [verifyData, setVerifyData] = useState(null);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [msg, setMsg] = useState({ text: '', type: '' });
   const [showSecret, setShowSecret] = useState(false);
 
@@ -22,6 +24,7 @@ export default function BrokerSettingsModal({ isOpen, onClose, onConfigUpdated }
       fetchConfig();
       setMsg({ text: '', type: '' });
       setRequestToken('');
+      setVerifyData(null);
     }
   }, [isOpen]);
 
@@ -89,6 +92,22 @@ export default function BrokerSettingsModal({ isOpen, onClose, onConfigUpdated }
       setMsg({ text: err.response?.data?.detail || 'Token exchange failed', type: 'error' });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleVerifyBroker = async () => {
+    try {
+      setIsVerifying(true);
+      setVerifyData(null);
+      const res = await terminalAPI.verifyBroker();
+      setVerifyData(res.data);
+    } catch (err) {
+      setVerifyData({
+        connected: false,
+        message: err.response?.data?.detail || 'Connection verification failed',
+      });
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -300,20 +319,97 @@ export default function BrokerSettingsModal({ isOpen, onClose, onConfigUpdated }
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#34d399', fontWeight: 700, fontSize: '0.9rem' }}>
                   <span>🟢</span> Zerodha Kite Connect v3
                 </div>
-                <span
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={handleVerifyBroker}
+                    disabled={isVerifying}
+                    style={{
+                      padding: '3px 10px',
+                      borderRadius: '6px',
+                      background: 'rgba(59, 130, 246, 0.15)',
+                      border: '1px solid rgba(59, 130, 246, 0.35)',
+                      color: '#93c5fd',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: isVerifying ? 'wait' : 'pointer',
+                    }}
+                  >
+                    {isVerifying ? '⏳ Checking...' : '🔍 Verify Live Account'}
+                  </button>
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      padding: '3px 8px',
+                      borderRadius: '99px',
+                      background: config.has_access_token ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                      color: config.has_access_token ? '#34d399' : '#fca5a5',
+                      border: `1px solid ${config.has_access_token ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+                    }}
+                  >
+                    {config.has_access_token ? 'ACTIVE SESSION' : 'NOT AUTHENTICATED'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Verify Status Card */}
+              {verifyData && (
+                <div
                   style={{
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    padding: '3px 8px',
-                    borderRadius: '99px',
-                    background: config.has_access_token ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                    color: config.has_access_token ? '#34d399' : '#fca5a5',
-                    border: `1px solid ${config.has_access_token ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+                    marginBottom: '14px',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    background:
+                      verifyData.connected && verifyData.has_access_token
+                        ? 'rgba(16, 185, 129, 0.12)'
+                        : 'rgba(245, 158, 11, 0.12)',
+                    border: `1px solid ${
+                      verifyData.connected && verifyData.has_access_token
+                        ? 'rgba(16, 185, 129, 0.35)'
+                        : 'rgba(245, 158, 11, 0.35)'
+                    }`,
+                    fontSize: '0.8rem',
+                    color: '#f8fafc',
                   }}
                 >
-                  {config.has_access_token ? 'ACTIVE SESSION' : 'NOT AUTHENTICATED'}
-                </span>
-              </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontWeight: 700,
+                      color:
+                        verifyData.connected && verifyData.has_access_token ? '#34d399' : '#fbbf24',
+                      marginBottom: '4px',
+                    }}
+                  >
+                    <span>{verifyData.connected && verifyData.has_access_token ? '✅' : '⚠️'}</span>
+                    <span>
+                      {verifyData.connected && verifyData.has_access_token
+                        ? 'Live Zerodha Account Verified'
+                        : 'Session Authorization Pending'}
+                    </span>
+                  </div>
+                  <div style={{ color: '#cbd5e1', fontSize: '0.78rem', lineHeight: 1.4 }}>
+                    {verifyData.user_name ? (
+                      <>
+                        <div>
+                          <strong>Trader Name:</strong> {verifyData.user_name} (Client ID: {verifyData.user_id})
+                        </div>
+                        <div>
+                          <strong>Available Live Margin:</strong> ₹
+                          {Number(verifyData.live_balance || 0).toLocaleString('en-IN', {
+                            maximumFractionDigits: 2,
+                          })}
+                        </div>
+                      </>
+                    ) : (
+                      <div>{verifyData.message}</div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* API Key */}
               <div style={{ marginBottom: '14px' }}>

@@ -570,3 +570,40 @@ class ZerodhaKiteService:
         except Exception as exc:
             logger.warning(f"Failed to fetch Kite positions: {exc}")
         return []
+
+    @staticmethod
+    def get_profile(api_key: str, access_token: str) -> Dict[str, Any]:
+        """Fetches user profile from Zerodha Kite to verify live account connection."""
+        url = f"{ZerodhaKiteService.BASE_URL}/user/profile"
+        headers = {
+            "X-Kite-Version": "3",
+            "Authorization": f"token {api_key}:{access_token}",
+            "User-Agent": "TradeMindOS/2.0",
+        }
+        try:
+            resp = requests.get(url, headers=headers, timeout=8)
+            data = resp.json()
+            if resp.status_code == 200 and data.get("status") == "success":
+                return {"success": True, "data": data.get("data", {})}
+            return {"success": False, "error": data.get("message", "Profile fetch failed")}
+        except Exception as exc:
+            return {"success": False, "error": str(exc)}
+
+    @staticmethod
+    def get_margins(api_key: str, access_token: str) -> Dict[str, Any]:
+        """Fetches live cash margins from Zerodha Kite."""
+        url = f"{ZerodhaKiteService.BASE_URL}/user/margins"
+        headers = {
+            "X-Kite-Version": "3",
+            "Authorization": f"token {api_key}:{access_token}",
+            "User-Agent": "TradeMindOS/2.0",
+        }
+        try:
+            resp = requests.get(url, headers=headers, timeout=8)
+            data = resp.json()
+            if resp.status_code == 200 and data.get("status") == "success":
+                return {"success": True, "data": data.get("data", {})}
+            return {"success": False, "error": data.get("message", "Margins fetch failed")}
+        except Exception as exc:
+            return {"success": False, "error": str(exc)}
+

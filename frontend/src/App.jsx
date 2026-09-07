@@ -58,7 +58,7 @@ function AppLayout() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      {user && !isTerminal && <AIBot monitorStats={monitorStats} />}
+      {user && <AIBot monitorStats={monitorStats} />}
     </>
   );
 }
