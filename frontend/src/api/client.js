@@ -111,6 +111,7 @@ export const terminalAPI = {
   getBrokerConfig: () => api.get('/terminal/broker-config'),
   updateBrokerConfig: (data) => api.post('/terminal/broker-config', data),
   exchangeKiteToken: (requestToken) => api.post('/terminal/broker-token', { request_token: requestToken }),
+  verifyBroker: () => api.get('/terminal/broker-verify'),
 };
 
 export default api;

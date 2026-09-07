@@ -60,11 +60,15 @@ def get_current_user(
     if payload is None:
         raise credentials_exception
 
-    user_id: Optional[int] = payload.get("sub")
+    user_id = payload.get("sub")
     if user_id is None:
         raise credentials_exception
 
-    user = db.query(models.User).filter(models.User.id == int(user_id)).first()
+    try:
+        user = db.query(models.User).filter(models.User.id == int(user_id)).first()
+    except (ValueError, TypeError):
+        user = db.query(models.User).filter(models.User.username == str(user_id)).first()
+
     if user is None:
         raise credentials_exception
     return user
